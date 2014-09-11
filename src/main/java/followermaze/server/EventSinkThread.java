@@ -7,7 +7,18 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 
+import org.apache.log4j.Logger;
+
+/**
+ * @author uv.wildner this thread is the event sink and passes the events to the
+ *         server for processing. Since there is only one event socket this
+ *         could be also done within the {@link ServerSocket} class. However, it
+ *         has been placed in a separate thread, permitting also additional
+ *         sockets to be served.
+ */
 public class EventSinkThread extends Thread {
+	static org.apache.log4j.Logger logger = Logger
+			.getLogger(EventSinkThread.class);
 
 	public ServerSocket getEventSocket() {
 		return eventSocket;
@@ -17,11 +28,10 @@ public class EventSinkThread extends Thread {
 		this.eventSocket = eventSocket;
 	}
 
-	private ServerSocket	eventSocket;
-	private BufferedReader	eventIn;
-	private PrintWriter		socketOut;
-	private int				eventCounter	= 0;
-	RegisterCallback		callback;
+	private ServerSocket eventSocket;
+	private BufferedReader eventIn;
+	private int eventCounter = 0;
+	RegisterCallback callback;
 
 	public EventSinkThread(RegisterCallback callback) {
 		super();
@@ -29,17 +39,17 @@ public class EventSinkThread extends Thread {
 	}
 
 	void openEventSocket(int eventListenerPort) {
-		System.out.format("listening on port %d\n", eventListenerPort);
+		logger.info("listening on port " + eventListenerPort);
 		try {
 			eventSocket = new ServerSocket(eventListenerPort);
 			Socket eventConnection = eventSocket.accept();
-			// TODSO not sure if it is at all needed to open the stream ??
-			socketOut = new PrintWriter(eventConnection.getOutputStream(), true);
-			eventIn = new BufferedReader(new InputStreamReader(eventConnection.getInputStream()));
-			System.out.format("connected eventstream on %d\n", eventListenerPort);
+			new PrintWriter(eventConnection.getOutputStream(), true);
+			eventIn = new BufferedReader(new InputStreamReader(
+					eventConnection.getInputStream()));
+			logger.info("connected eventstream on " + eventListenerPort);
 			callback.registerEventSource(this);
 		} catch (Exception e) {
-			System.out.format("Exception when opening socket %s", e.toString());
+			logger.error("EST1 Exception when opening socket ", e);
 		}
 	}
 
@@ -52,13 +62,12 @@ public class EventSinkThread extends Thread {
 		String event;
 		try {
 			while ((event = eventIn.readLine()) != null) {
-				System.out.format("read event %s\n", event);
+				logger.debug("read event " + event);
 				eventCounter++;
 				callback.handleEvent(event, eventCounter);
 			}
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			logger.error("EST2 problem reading stream", e);
 		}
 	}
 }

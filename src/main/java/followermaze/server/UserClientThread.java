@@ -7,10 +7,23 @@ import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.util.Set;
+import java.util.TreeSet;
 
-public class UserClientThread extends Thread {
+import org.apache.log4j.Logger;
 
-	private Socket	clientSocket;
+/**
+ * @author uv.wildner The {@link UserClientThread} is the thread per client in
+ *         the communication model. Upon successful connection this class
+ *         registers itself with the {@link SocketServer}
+ * 
+ */
+public class UserClientThread extends Thread implements
+		Comparable<UserClientThread> {
+
+	static Logger logger = Logger.getLogger(UserClientThread.class);
+
+	private Socket clientSocket;
 
 	public Socket getClientSocket() {
 		return clientSocket;
@@ -20,9 +33,9 @@ public class UserClientThread extends Thread {
 		this.clientSocket = clientSocket;
 	}
 
-	private BufferedReader		socketIn;
-	private BufferedReader		eventIn;
-	private PipedOutputStream	eventStream;
+	private BufferedReader socketIn;
+	private BufferedReader eventIn;
+	private PipedOutputStream eventStream;
 
 	public PipedOutputStream getEventStream() {
 		return eventStream;
@@ -32,11 +45,12 @@ public class UserClientThread extends Thread {
 		this.eventStream = eventStream;
 	}
 
-	private int			eventCounter	= 0;
-	RegisterCallback	callback;
+	private Integer eventCounter = 0;
+	RegisterCallback socketServer;
 
-	private PrintWriter	socketOut;
-	private Integer		clientId;
+	private PrintWriter socketOut;
+	private Integer clientId;
+	private Set<UserClientThread> followers;
 
 	public Integer getClientId() {
 		return clientId;
@@ -46,13 +60,16 @@ public class UserClientThread extends Thread {
 		this.clientId = id;
 	}
 
-	public UserClientThread(Socket clientSocket, RegisterCallback callback) {
+	public UserClientThread(Socket clientSocket, RegisterCallback socketServer) {
 		super();
 		this.clientSocket = clientSocket;
-		this.callback = callback;
+		this.socketServer = socketServer;
+		followers = new TreeSet<UserClientThread>();
+
 		try {
 			socketOut = new PrintWriter(clientSocket.getOutputStream(), true);
-			socketIn = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+			socketIn = new BufferedReader(new InputStreamReader(
+					clientSocket.getInputStream()));
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -61,12 +78,12 @@ public class UserClientThread extends Thread {
 	@Override
 	public void run() {
 		readClientId();
-		callback.registerClient(this);
+		socketServer.registerClient(this);
 		try {
-			eventIn = new BufferedReader(new InputStreamReader(new PipedInputStream(eventStream)));
+			eventIn = new BufferedReader(new InputStreamReader(
+					new PipedInputStream(eventStream)));
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			logger.error("UCT1 problem creating input pipe", e);
 		}
 		handleEvents();
 	}
@@ -79,22 +96,38 @@ public class UserClientThread extends Thread {
 				socketOut.append(event);
 			}
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			logger.error("UCT2 problem reading event", e);
 		}
 	}
 
 	/**
-	 * read client Id from socket and send back to server to mark reception of events
+	 * read client Id from socket and send back to server to mark reception of
+	 * events
 	 */
 	void readClientId() {
 		try {
 			clientId = Integer.valueOf(socketIn.readLine());
-			System.out.format("read Client id on remote port %d %d\n", clientSocket.getPort(), clientId);
+			logger.debug("read Client id on remote port "
+					+ clientSocket.getPort() + " " + clientId);
 		} catch (NumberFormatException e) {
-			e.printStackTrace();
+			logger.error("UCT3 problem reading client id", e);
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error("UCT4 problem reading client id", e);
 		}
+	}
+
+	public Set<UserClientThread> getFollowers() {
+		return followers;
+	}
+
+	public void setFollowers(Set<UserClientThread> followers) {
+		this.followers = followers;
+	}
+
+	/*
+	 * @see java.lang.Comparable#compareTo(java.lang.Object)
+	 */
+	public int compareTo(UserClientThread other) {
+		return clientId.compareTo(other.getClientId());
 	}
 }
