@@ -11,16 +11,14 @@ import java.util.PriorityQueue;
 import org.apache.log4j.Logger;
 
 /**
- * The {@link SocketServer}is the most minimal and intuitive implementation for
- * this task. A basic thread per connection model has been implemented. For each
- * connecting client a {@link UserClientThread} is created and placed in the
- * clientConnections HashMap. The events are read using the
- * {@link EventSinkThread} and written into a {@link PriorityQueue}. If there
- * are writable events they are written into the {@link PipedOutputStream} of
- * the corresponding {@link UserClientThread}.
+ * The {@link SocketServer}is the most minimal and intuitive implementation for this task. A basic
+ * thread per connection model has been implemented. For each connecting client a
+ * {@link UserClientThread} is created and placed in the clientConnections HashMap. The events are
+ * read using the {@link EventSinkThread} and written into a {@link PriorityQueue}. If there are
+ * writable events they are written into the {@link PipedOutputStream} of the corresponding
+ * {@link UserClientThread}.
  * 
- * A NIO based approach with a thread pool handling the events would the be more
- * efficient design.
+ * A NIO based approach with a thread pool handling the events would the be more efficient design.
  * 
  * @author uv.wildner simple server socket
  */
@@ -30,47 +28,54 @@ class SocketServer implements RegisterCallback {
 	private int clientListenerPort;
 	private int eventListenerPort;
 	private Map<Integer, UserClientThread> clientConnections = new HashMap<Integer, UserClientThread>();
-	private PriorityQueue<Event> eventQueue;
+	private long eventQueueCounter = 0;
+	private PriorityQueue<Event> eventPriorityQueue = new PriorityQueue<Event>();
 
 	public Map<Integer, UserClientThread> getClientConnections() {
 		return clientConnections;
 	}
 
-	public void setClientConnections(
-			Map<Integer, UserClientThread> clientConnections) {
+	public void setClientConnections(Map<Integer, UserClientThread> clientConnections) {
 		this.clientConnections = clientConnections;
 	}
 
 	private EventSinkThread eventSinkThread;
 
 	/**
-	 * CTOR reading the ports from system properties
+	 * CTOR is trying to read the port configuration from system properties before using the
+	 * defaults
 	 */
 	public SocketServer() {
 		clientListenerPort = Integer.parseInt(System.getProperty(
-				Properties.clientListenerPort,
-				Properties.clientListenerPortDefault));
+				Properties.clientListenerPortPropertyName, Properties.clientListenerPortDefault));
 		eventListenerPort = Integer.parseInt(System.getProperty(
-				Properties.eventListenerPort,
-				Properties.eventListenerPortDefault));
-		eventQueue = new PriorityQueue<Event>();
+				Properties.eventListenerPortPropertyName, Properties.eventListenerPortDefault));
 	}
 
+	/**
+	 * open the event sink socket in a separate thread and start it
+	 */
 	private void startEventConnection() {
 		EventSinkThread eventSinkThread = new EventSinkThread(this);
+		logger.debug("opening port " + eventListenerPort);
 		eventSinkThread.openEventSocket(eventListenerPort);
 		eventSinkThread.start();
 	}
 
-	private ServerSocket waitForClientConnection() throws IOException {
+	/**
+	 * we open a server socket and wait for the clients to connect. when that happens we pass the
+	 * client socket to a separate client thread and start it to connect to it.
+	 * 
+	 * @return
+	 * @throws IOException
+	 */
+	private ServerSocket listenForConnectingClients() throws IOException {
 		logger.info("listening on port " + clientListenerPort);
-		ServerSocket clientListeningSocket = new ServerSocket(
-				clientListenerPort);
+		ServerSocket clientListeningSocket = new ServerSocket(clientListenerPort);
 		try {
 			while (!clientListeningSocket.isClosed()) {
 				Socket clientSocket = clientListeningSocket.accept();
-				logger.info("connected to user Client on remote port "
-						+ clientSocket.getPort());
+				logger.info("connected to user Client on remote port " + clientSocket.getPort());
 				UserClientThread uct = new UserClientThread(clientSocket, this);
 				uct.start();
 			}
@@ -82,13 +87,17 @@ class SocketServer implements RegisterCallback {
 		return null;
 	}
 
+	/**
+	 * here we regiser our client in
+	 * 
+	 * @see followermaze.server.RegisterCallback#registerClient(followermaze.server.UserClientThread)
+	 */
 	public void registerClient(UserClientThread userClientThread) {
 		logger.info("trying to register client " + userClientThread.getId());
 		synchronized (clientConnections) {
 			PipedOutputStream eventStream = new PipedOutputStream();
 			userClientThread.setEventStream(eventStream);
-			clientConnections.put(userClientThread.getClientId(),
-					userClientThread);
+			clientConnections.put(userClientThread.getClientId(), userClientThread);
 			logger.info("SSregistered client " + userClientThread.getId());
 		}
 	}
@@ -97,18 +106,27 @@ class SocketServer implements RegisterCallback {
 		this.eventSinkThread = eventSinkThread;
 	}
 
-	public void handleEvent(String eventWord, int eventCounter)
-			throws IOException {
+	/**
+	 * this is called from the event listener/sink thread passing the event and the global event
+	 * counter. <br>
+	 * After placing the event in the orderedEventQueue, this handler checks if the queue head
+	 * matches our event number. This is where we would introduce a time stamp and a timer to carry
+	 * on if a message got missing.
+	 * 
+	 * @see followermaze.server.RegisterCallback#handleEvent(java.lang.String, int)
+	 */
+	public void handleEvent(String eventWord, int eventCounter) throws IOException {
 		Event event = new Event(eventWord);
-		eventQueue.add(event);
-		logger.debug("eventNo " + eventCounter + " payload "
-				+ eventWord.toString());
+		eventPriorityQueue.add(event);
+		logger.debug("eventNo " + eventCounter + " payload " + eventWord.toString());
 		UserClientThread fromUCT = clientConnections.get(event.getFromUserId());
 		UserClientThread toUCT = clientConnections.get(event.getToUserId());
 
-		Event queueHead = eventQueue.peek();
-		// send all the event we can
-		while (queueHead.getSequenceNo() == eventCounter) {
+		Event queueHead = eventPriorityQueue.peek();
+
+		// when we have the matching event in our queue we process it and try also with the directly
+		// following seq nos
+		while (queueHead != null && queueHead.getSequenceNo() == eventQueueCounter) {
 			switch (queueHead.getType()) {
 			case BROADCAST: {
 				for (UserClientThread uct : clientConnections.values()) {
@@ -149,23 +167,31 @@ class SocketServer implements RegisterCallback {
 			default:
 				logger.error("unknown eventype " + eventWord);
 			}
-			eventCounter++; // event processed, deal with next one
+			// remove the head from the queue and peek at next one
+			eventPriorityQueue.remove();
+			queueHead = eventPriorityQueue.peek();
+			eventQueueCounter++; // event processed, deal with next one
 		}
 		return; // wait for next event to arrive
 	}
 
+	/**
+	 * the main method starts the event listener and starts listening for clients after socket
+	 * cleanup is attempted when leaving the program
+	 * 
+	 * @param args
+	 */
 	public static void main(String[] args) {
 		SocketServer server = new SocketServer();
 		server.startEventConnection();
 		try {
-			server.waitForClientConnection();
+			server.listenForConnectingClients();
 		} catch (IOException e) {
 			logger.error("SS2 problem getting client connections", e);
 		} finally {
 			try {
 				server.eventSinkThread.getEventSocket().close();
-				for (UserClientThread uct : server.getClientConnections()
-						.values()) {
+				for (UserClientThread uct : server.getClientConnections().values()) {
 					uct.getClientSocket().close();
 				}
 			} catch (IOException e) {
