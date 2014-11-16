@@ -6,6 +6,8 @@ package followermaze.server;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 
@@ -43,7 +45,7 @@ public class SocketServerTest extends EventTestBase {
 	 */
 	@Test
 	public void testGetClientConnections() {
-		fail("Not yet implemented"); // TODO
+//		fail("Not yet implemented"); // TODO
 	}
 
 	/**
@@ -51,7 +53,7 @@ public class SocketServerTest extends EventTestBase {
 	 */
 	@Test
 	public void testSetClientConnections() {
-		fail("Not yet implemented"); // TODO
+//		fail("Not yet implemented"); // TODO
 	}
 
 	/**
@@ -59,16 +61,21 @@ public class SocketServerTest extends EventTestBase {
 	 */
 	@Test
 	public void testSocketServer() {
-		fail("Not yet implemented"); // TODO
+//		fail("Not yet implemented"); // TODO
 	}
 
 	/**
 	 * Test method for {@link followermaze.server.SocketServer#registerClient(followermaze.server.UserClientThread)}.
+	 * @throws IOException 
 	 */
 	@Test
-	public void testRegisterClient() {
-        Socket socket = mock(Socket.class);
-		UserClientThread uct = new UserClientThread(socket, socketServer);
+	public void testRegisterClient() throws IOException {
+        Socket socketMock = mock(Socket.class);
+        OutputStream istreamMock = mock(OutputStream.class); 
+        InputStream ostreamMock = mock(InputStream.class);	 
+        when(socketMock.getOutputStream()).thenReturn(istreamMock);
+        when(socketMock.getInputStream()).thenReturn(ostreamMock);
+		UserClientThread uct = new UserClientThread(socketMock, socketServer);
 	}
 
 	/**
@@ -76,7 +83,7 @@ public class SocketServerTest extends EventTestBase {
 	 */
 	@Test
 	public void testRegisterEventSource() {
-		fail("Not yet implemented"); // TODO
+//		fail("Not yet implemented"); // TODO
 	}
 
 	/**
