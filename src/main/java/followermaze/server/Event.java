@@ -1,5 +1,6 @@
 package followermaze.server;
 
+import java.io.IOException;
 import java.util.Comparator;
 
 /**
@@ -7,6 +8,7 @@ import java.util.Comparator;
  *         serialized text form with via the CTOR
  */
 public class Event implements Comparator<Event>, Comparable<Event> {
+	Character separator = '|'; 
 	private Long sequenceNo;
 	private EventEnum type;
 	private Integer fromUserId;
@@ -56,6 +58,15 @@ public class Event implements Comparator<Event>, Comparable<Event> {
 		this.toUserId = toUserId;
 	}
 
+	public String getEventWord() {
+		StringBuffer buffer = new StringBuffer().append(sequenceNo).append(separator).append(type.toString());
+		if (fromUserId != null)
+			buffer.append(separator).append(fromUserId);
+		if (toUserId != null)
+			buffer.append(separator).append(toUserId);
+		return buffer.toString();
+	}
+	
 	public int compare(Event o1, Event o2) {
 		return o1.compareTo(o2);
 	}

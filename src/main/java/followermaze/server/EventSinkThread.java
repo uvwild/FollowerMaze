@@ -20,18 +20,13 @@ public class EventSinkThread extends Thread {
 	static org.apache.log4j.Logger logger = Logger.getLogger(EventSinkThread.class);
 
 	private ServerSocket eventSocket;
+	private BufferedReader eventIn;
+	private int eventCounter;
+	RegisterCallback callback;
 
 	public ServerSocket getEventSocket() {
 		return eventSocket;
 	}
-
-	public void setEventSocket(ServerSocket eventSocket) {
-		this.eventSocket = eventSocket;
-	}
-
-	private BufferedReader eventIn;
-	private int eventCounter;
-	RegisterCallback callback;
 
 	public EventSinkThread(RegisterCallback callback) {
 		super();
@@ -40,7 +35,7 @@ public class EventSinkThread extends Thread {
 
 	/**
 	 * given the port we open a buffered reader for the input of the event connection and a
-	 * printwriter for the output after we are using a callback on the socket server to register the
+	 * print writer for the output after we are using a callback on the socket server to register the
 	 * event source (leaving the option to add more)
 	 * 
 	 * @param eventListenerPort
